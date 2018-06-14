@@ -1,5 +1,5 @@
 # bpmn-persistence
-[![Build Status](https://travis-ci.org/cquencial/bpmn-persistence.svg?branch=master)](https://travis-ci.org/cquencial/bpmn-persistence)
+[![Build Status](https://travis-ci.org/cquencial/meteor-bpmn-persistence.svg?branch=master)](https://travis-ci.org/cquencial/meteor-bpmn-persistence)
 
 Providing a persistence layer for cquencial:bpmn-engine.
 
