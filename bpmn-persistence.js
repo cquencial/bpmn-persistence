@@ -1,3 +1,4 @@
+/* global SHA256 Bpmn */
 import { check, Match } from 'meteor/check'
 import { Mongo } from 'meteor/mongo'
 import { Meteor } from 'meteor/meteor'
@@ -6,23 +7,23 @@ const _name = 'extensions:persistence'
 
 const persistence = {}
 
-////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////
 //
 //  Define Collection
 //
-////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////
 
 const BpmnPersistenceCollectionSchema = {
   instanceId: String,
   state: {
-    type: String,
+    type: String
   },
   hash: String,
   createdAt: {
-    type: String,
+    type: String
   },
   createdBy: {
-    type: String,
+    type: String
   }
 }
 
@@ -32,11 +33,11 @@ BpmnPersistenceCollection.name = collectionName
 BpmnPersistenceCollection.schema = BpmnPersistenceCollectionSchema
 persistence.collection = BpmnPersistenceCollection
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //  savePersistent
 //
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const hashMatch = Match.Where(h => !!h && typeof h === 'string' && h.length === 64)
 
@@ -79,28 +80,30 @@ persistence.save = function ({instanceId, state, userId = 'anonymous'}) {
     hash,
     instanceId,
     createdAt: timeStamp,
-    createdBy: userId,
+    createdBy: userId
   })
 
-  if (!insertId)
+  if (!insertId) {
     throw new Error('persistence doc not created for instanceId ' + instanceId)
+  }
   return insertId
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //  loadPersistent
 //
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 function load (persistenceDoc) {
+  check(persistenceDoc, Match.Where(x => x && typeof x === 'object'))
   const stateStr = persistenceDoc.state.replace(/__dollar__/g, '$')
 
-  if (!persistence.verify(stateStr, persistenceDoc.hash))
-    throw new Error('invalid hash signature for persistence state. instanceId=' + instanceId)
+  if (!persistence.verify(stateStr, persistenceDoc.hash)) {
+    throw new Error('invalid hash signature for persistence state. instanceId=' + persistenceDoc.instanceId)
+  }
 
-  const state = JSON.parse(stateStr)
-  persistenceDoc.state = state
+  persistenceDoc.state = JSON.parse(stateStr)
   return persistenceDoc
 }
 
@@ -117,18 +120,17 @@ persistence.latest = function (instanceId) {
   return load(persistenceDoc)
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
 //  Hooks
 //
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const persistenceHooks = {}
 
 // EXECUTE
 
 persistenceHooks.onExecuteBefore = function (engineFct, options) {
-
   const preventEvents = options && options.prevent
 
   // listen to engine's end unless prevented
@@ -141,7 +143,7 @@ persistenceHooks.onExecuteBefore = function (engineFct, options) {
       persistence.save({
         instanceId: engine.instanceId,
         state: engine.getState(),
-        userId: this.userId,
+        userId: this.userId
       })
     }))
   }
@@ -152,34 +154,32 @@ persistenceHooks.onExecuteBefore = function (engineFct, options) {
     persistence.save({
       instanceId: engine.instanceId,
       userId: this.userId,
-      state: engine.getState(),
+      state: engine.getState()
     })
-
-  }, preventEvents ? preventEvents : undefined)
+  }, preventEvents)
 
   options.listener = Bpmn.mergeListeners({
     source: options.listener,
-    target: persistenceListener,
+    target: persistenceListener
   })
 }
 
 // RESUME
 
 persistenceHooks.onResumeBefore = function (engineFct, options) {
-
   const preventEvents = options && options.prevent
 
   const persistenceListener = Bpmn.createListeners(() => {
     const engine = engineFct()
     persistence.save({
       instanceId: options.instanceId,
-      state: engine && engine.getState(),
+      state: engine && engine.getState()
     })
   }, preventEvents)
 
   options.listener = Bpmn.mergeListeners({
     source: options.listener,
-    target: persistenceListener,
+    target: persistenceListener
   })
 }
 
@@ -190,14 +190,14 @@ persistenceHooks.onResumeAfter = Meteor.bindEnvironment(function (engineFct, opt
     if (engine.stopped) return
     persistence.save({
       instanceId: options.instanceId,
-      state: engine && engine.getState(),
+      state: engine && engine.getState()
     })
   })
 })
 
 // STOP
 
-persistenceHooks.onStopBefore = Meteor.bindEnvironment(function (engineFct, options) {
+persistenceHooks.onStopBefore = Meteor.bindEnvironment(function (engineFct) {
   const engine = engineFct()
   persistence.save({instanceId: engine.instanceId, state: engine.getState()})
 })
@@ -212,10 +212,10 @@ persistence.off = function off () {
   Bpmn.hooks.remove(_name)
 }
 
-////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////
 //
 //  ASSIGN EXTENSION
 //
-////////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////
 
 Bpmn.persistence = persistence
