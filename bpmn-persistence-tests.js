@@ -156,6 +156,24 @@ describe('bpmn-persistence', function () {
       })
       engine.execute({prevent: preventEvents})
     })
+
+    it('rejects to create a document when the has already exists', function () {
+      const insertDoc = {
+        instanceId: Random.id(),
+        state: {
+          name: Random.id(),
+          state: Random.id(),
+          engineVersion: '1.0.0',
+          definitions: [{
+            name: Random.id()
+          }]
+        },
+        userId: Random.id()
+      }
+      const insertId = Bpmn.persistence.save(insertDoc)
+      assert.isDefined(insertId)
+      assert.equal(Bpmn.persistence.save(insertDoc), false)
+    })
   })
 
   describe('Bpmn.persistence.has', function () {
