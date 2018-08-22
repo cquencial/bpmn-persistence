@@ -70,6 +70,8 @@ describe('bpmn-persistence', function () {
 
     userId = Random.id()
     instanceId = Random.id()
+
+    Bpmn.persistence.collection.remove({})
   })
 
   afterEach(() => {
@@ -119,13 +121,22 @@ describe('bpmn-persistence', function () {
       })
     })
 
-    it('creates one persistence document per event', function (done) {
+    it('does not create double entries', function (done) {
       const engine = new Bpmn.Engine({source: processXml, instanceId})
 
       engine.on('end', Meteor.bindEnvironment(() => {
         Meteor._sleepForMs(150)
         const persistenceDocs = Bpmn.persistence.collection.find({instanceId}).fetch()
-        assert.equal(persistenceDocs.length, 10)
+
+        // ensure no hashes are doubled here
+        const hashes = {}
+        persistenceDocs.forEach(doc => {
+          if (hashes[doc.hash]) {
+            done(new Error('double hash found in saved docs'))
+          } else {
+            hashes[doc.hash] = true
+          }
+        })
         done()
       }))
 
@@ -157,7 +168,7 @@ describe('bpmn-persistence', function () {
       engine.execute({prevent: preventEvents})
     })
 
-    it('rejects to create a document when the has already exists', function () {
+    it('rejects to create a document when the hash already exists', function () {
       const insertDoc = {
         instanceId: Random.id(),
         state: {
@@ -315,12 +326,13 @@ describe('bpmn-persistence', function () {
 
       const waitListener = new EventEmitter()
       waitListener.on('wait', Meteor.bindEnvironment(() => {
+        Meteor._sleepForMs(100)
         stateBeforeStop = engine.getState()
         engine.stop()
       }))
 
       engine.on('end', Meteor.bindEnvironment(() => {
-        console.log('on end')
+
         Meteor._sleepForMs(100)
         const persistenceDoc = Bpmn.persistence.latest(engine.instanceId)
         const hash = SHA256(JSON.stringify(stateBeforeStop))
@@ -338,20 +350,23 @@ describe('bpmn-persistence', function () {
       let stateAfterStop
       const waitListener = new EventEmitter()
       waitListener.on('wait', Meteor.bindEnvironment(() => {
+        Meteor._sleepForMs(100)
         stateBeforeStop = engine.getState()
         engine.stop()
       }))
 
       engine.on('end', Meteor.bindEnvironment(() => {
-        console.log('on end')
         Meteor._sleepForMs(100)
         stateAfterStop = engine.getState()
 
-        const persistenceDoc = Bpmn.persistence.latest(engine.instanceId)
         const hashBeforeStop = SHA256(JSON.stringify(stateBeforeStop))
-        const hashAfterStop = SHA256(JSON.stringify(stateBeforeStop))
-        assert.equal(hashBeforeStop, hashAfterStop)
-        assert.equal(persistenceDoc.hash, hashBeforeStop)
+        const hashAfterStop = SHA256(JSON.stringify(stateAfterStop))
+
+        // because after stop there is a new state 'halt'
+        // we don't want it to be saved. Thus,
+        // our latest state should not have the same hash, too.
+        assert.notEqual(hashBeforeStop, hashAfterStop)
+        assert.isFalse(!!Bpmn.persistence.collection.findOne({instanceId: engine.instanceId, hash: hashAfterStop}))
         done()
       }))
 
@@ -367,7 +382,6 @@ describe('bpmn-persistence', function () {
 
       const waitListener = new EventEmitter()
       waitListener.on('wait', () => {
-        console.log('wait', complete)
         if (complete)
           done()
         else

@@ -3,6 +3,13 @@
 
 Providing a persistence layer for cquencial:bpmn-engine.
 
+### Changelog
+
+**0.1.1**
+
+- Reject to save states for which the sha hash already exists
+
+
 ### Installation
 
 Add this package with `cquencial:bpmn-engine` to your packages list (if you didn't already install `cquencial:bpmn-engine`):

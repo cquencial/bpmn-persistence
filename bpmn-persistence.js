@@ -48,6 +48,12 @@ persistence.has = function (instanceId) {
   return !!BpmnPersistenceCollection.findOne({instanceId})
 }
 
+/**
+ * Check a state against a given hash
+ * @param state a state from the engine, given by engine.getState()
+ * @param hash a given hash as created by Bpmn.persistence.save
+ * @returns {boolean} true if the hash created for the state equals the given hash
+ */
 persistence.verify = function (state, hash) {
   check(state, Match.OneOf(String, stateObjMatch))
   check(hash, hashMatch)
@@ -55,9 +61,11 @@ persistence.verify = function (state, hash) {
   return SHA256(stateStr) === hash
 }
 
+const hashCache = {}
+
 /**
- * Saves the current process' state. The state is serialized to a JSON, that can be dezerialized
- * using the Bpmn.loadPersistent method.
+ * Saves the current process' state. The state is serialized to a JSON, that can be de-serialized
+ * using the Bpmn.persistence.load method.
  */
 persistence.save = function ({instanceId, state, userId = 'anonymous'}) {
   check(instanceId, String)
@@ -68,13 +76,27 @@ persistence.save = function ({instanceId, state, userId = 'anonymous'}) {
 
   const stateStr = JSON.stringify(state)
   const hash = SHA256(stateStr)
+  const cacheId = instanceId + hash
 
+  // in order to find doubles
+  // in async environment
+  // we don't wait the insert
+  // to be completed but use a
+  // cache object
+  if (hashCache[cacheId]) {
+    return false
+  }
+  hashCache[cacheId] = true
+
+  // on long term checks
+  // we don't need the cache
+  // but take a direct lookup
+  // into the collection
   if (BpmnPersistenceCollection.findOne({instanceId, hash})) {
     return false
   }
 
   const mongoCompatibleStateStr = stateStr.replace(/\$/g, '__dollar__') // TODO add compression
-
   const insertId = BpmnPersistenceCollection.insert({
     state: mongoCompatibleStateStr,
     hash,
@@ -83,9 +105,11 @@ persistence.save = function ({instanceId, state, userId = 'anonymous'}) {
     createdBy: userId
   })
 
-  if (!insertId) {
-    throw new Error('persistence doc not created for instanceId ' + instanceId)
-  }
+  // prevent memory leak
+  // and delete the cache once
+  // the doc has been saved
+  delete hashCache[cacheId]
+
   return insertId
 }
 
@@ -116,7 +140,7 @@ persistence.load = function (persistenceDocId) {
 persistence.latest = function (instanceId) {
   check(instanceId, String)
 
-  const persistenceDoc = BpmnPersistenceCollection.findOne({instanceId}, {sort: {createdAt: -1}})
+  const persistenceDoc = BpmnPersistenceCollection.findOne({instanceId}, {hint: {$natural: -1}})
   return load(persistenceDoc)
 }
 
@@ -150,7 +174,6 @@ persistenceHooks.onExecuteBefore = function (engineFct, options) {
 
   const persistenceListener = Bpmn.createListeners((element, instance, event) => {
     const engine = engineFct()
-    // console.log("save on ", event);
     persistence.save({
       instanceId: engine.instanceId,
       userId: this.userId,
