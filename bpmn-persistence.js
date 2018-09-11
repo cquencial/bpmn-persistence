@@ -32,6 +32,7 @@ const BpmnPersistenceCollection = new Mongo.Collection(collectionName)
 BpmnPersistenceCollection.name = collectionName
 BpmnPersistenceCollection.schema = BpmnPersistenceCollectionSchema
 persistence.collection = BpmnPersistenceCollection
+persistence.methods = {}
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //
